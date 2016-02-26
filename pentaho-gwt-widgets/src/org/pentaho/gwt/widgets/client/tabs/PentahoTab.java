@@ -46,6 +46,7 @@ public class PentahoTab extends SimplePanel {
     this.tabPanel = tabPanel;
     setStylePrimaryName( "pentaho-tabWidget" );
     sinkEvents( Event.ONDBLCLICK | Event.ONMOUSEUP );
+	setupNativeHooks( this );
 
     if ( closeable ) {
       final Image closeTabImage =
@@ -162,4 +163,14 @@ public class PentahoTab extends SimplePanel {
   public void setSolutionBrowserShowing( boolean solutionBrowserShowing ) {
     this.solutionBrowserShowing = solutionBrowserShowing;
   }
+
+  public static native void setupNativeHooks( PentahoTab pentahoTab ) /*-{
+    $wnd.closeReportTab =
+        $entry(pentahoTab.@org.pentaho.gwt.widgets.client.tabs.PentahoTab::closeTab());
+
+    $wnd.checkTabPanel = function() {
+        var val = pentahoTab.@org.pentaho.gwt.widgets.client.tabs.PentahoTab::tabPanel;
+        console.log(val);		
+    }
+  }-*/;
 }
