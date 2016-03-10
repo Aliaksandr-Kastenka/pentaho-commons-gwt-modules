@@ -17,14 +17,23 @@
 
 package org.pentaho.gwt.widgets.client.tabs;
 
+import org.pentaho.gwt.widgets.client.dialogs.MessageDialogBox;
 import org.pentaho.gwt.widgets.client.utils.ImageUtil;
 
+import com.google.gwt.core.client.GWT;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.event.dom.client.MouseOutEvent;
 import com.google.gwt.event.dom.client.MouseOutHandler;
 import com.google.gwt.event.dom.client.MouseOverEvent;
 import com.google.gwt.event.dom.client.MouseOverHandler;
+import com.google.gwt.json.client.JSONObject;
+import com.google.gwt.json.client.JSONParser;
+import com.google.gwt.http.client.Request;
+import com.google.gwt.http.client.RequestBuilder;
+import com.google.gwt.http.client.RequestCallback;
+import com.google.gwt.http.client.RequestException;
+import com.google.gwt.http.client.Response;
 import com.google.gwt.user.client.DOM;
 import com.google.gwt.user.client.Event;
 import com.google.gwt.user.client.ui.HorizontalPanel;
@@ -33,9 +42,15 @@ import com.google.gwt.user.client.ui.Label;
 import com.google.gwt.user.client.ui.SimplePanel;
 import com.google.gwt.user.client.ui.Widget;
 
+import org.pentaho.mantle.client.events.EventBusUtil;
+import org.pentaho.mantle.client.events.ReportTabCloseEvent;
+import org.pentaho.mantle.client.events.ReportTabCloseEventHandler;
+import org.pentaho.mantle.client.messages.Messages;
+
 public class PentahoTab extends SimplePanel {
 
   public static final String SELECTED = "selected";
+  private static String statusUrl;
   private PentahoTabPanel tabPanel;
   private Widget content;
   protected Label label = new Label();
@@ -46,6 +61,7 @@ public class PentahoTab extends SimplePanel {
     this.tabPanel = tabPanel;
     setStylePrimaryName( "pentaho-tabWidget" );
     sinkEvents( Event.ONDBLCLICK | Event.ONMOUSEUP );
+    setupNativeHooks();    
 
     if ( closeable ) {
       final Image closeTabImage =
@@ -55,6 +71,7 @@ public class PentahoTab extends SimplePanel {
         public void onClick( ClickEvent event ) {
           event.getNativeEvent().stopPropagation();
           closeTab();
+		  fireEvent();            
         }
       } );
       closeTabImage.addMouseOverHandler( new MouseOverHandler() {
@@ -162,4 +179,71 @@ public class PentahoTab extends SimplePanel {
   public void setSolutionBrowserShowing( boolean solutionBrowserShowing ) {
     this.solutionBrowserShowing = solutionBrowserShowing;
   }
+
+  public static void addHandler( final String cancelUrl ) {
+    statusUrl = cancelUrl.replace( "/cancel", "/status" );
+    EventBusUtil.EVENT_BUS.addHandler(ReportTabCloseEvent.TYPE, new ReportTabCloseEventHandler() {
+      @Override
+      public void onTabClose(ReportTabCloseEvent event) {
+
+        RequestBuilder builder = new RequestBuilder( RequestBuilder.GET, cancelUrl );
+          builder.setHeader( "Content-Type", "application/xml" );
+          RequestCallback callback = new RequestCallback() {
+
+            public void onError( Request request, Throwable exception ) {
+              MessageDialogBox dialogBox =
+                  new MessageDialogBox( Messages.getString( "error" ), exception.toString(), false, false, true ); //$NON-NLS-1$
+              dialogBox.center();
+            }
+
+            public void onResponseReceived( Request request, Response response ) {
+            }
+          };
+
+          try {
+            builder.sendRequest( "", callback ); //$NON-NLS-1$ //$NON-NLS-2$
+          } catch ( RequestException e ) {
+            e.printStackTrace();
+          }
+      }
+    });
+  }
+
+  public static void fireEvent() {
+    RequestBuilder builder = new RequestBuilder( RequestBuilder.GET, statusUrl );
+    builder.setHeader( "Content-Type", "application/xml" );
+    RequestCallback callback = new RequestCallback() {
+
+      public void onError( Request request, Throwable exception ) {
+        MessageDialogBox dialogBox =
+            new MessageDialogBox( Messages.getString( "error" ), exception.toString(), false, false, true ); //$NON-NLS-1$
+        dialogBox.center();
+      }
+
+      public void onResponseReceived( Request request, Response response ) {
+        ReportTabCloseEvent closeEvent = new ReportTabCloseEvent();
+        closeEvent.setAction( PentahoTab.class.getName() );
+        if ( response.getStatusCode() == Response.SC_OK ) {
+          JSONObject jsonObject = (JSONObject) JSONParser.parseLenient( response.getText() );
+          String status = jsonObject.get( "status" ).toString();
+            if ( status.equals( "QUEUED" ) || status.equals( "WORKING" ) || status.equals( "CONTENT_AVAILABLE" ) ) {
+              closeEvent.setMessage( "Close" );
+              EventBusUtil.EVENT_BUS.fireEvent( closeEvent );
+            }
+        }
+      }
+    };
+
+    try {
+      builder.sendRequest( "", callback ); //$NON-NLS-1$ //$NON-NLS-2$
+    } catch ( RequestException e ) {
+      e.printStackTrace();
+    }
+  }
+
+  public static native void setupNativeHooks() /*-{
+    $wnd.mantle_addHandler = function (cancelUrl) {
+      @org.pentaho.gwt.widgets.client.tabs.PentahoTab::addHandler(Ljava/lang/String;)(cancelUrl);
+    }
+  }-*/;
 }
