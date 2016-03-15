@@ -149,6 +149,7 @@ public class PentahoTab extends SimplePanel {
 
   protected void closeTab() {
     tabPanel.closeTab( this, true );
+    fireCloseTab();
   }
 
   protected void fireTabSelected() {
@@ -162,4 +163,8 @@ public class PentahoTab extends SimplePanel {
   public void setSolutionBrowserShowing( boolean solutionBrowserShowing ) {
     this.solutionBrowserShowing = solutionBrowserShowing;
   }
+  
+  public static native void fireCloseTab() /*-{
+    $wnd.mantle_fireEvent('tabClosing', {"tabId": "myId"});
+  }-*/; 
 }
